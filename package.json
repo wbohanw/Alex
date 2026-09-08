@@ -1,0 +1,19 @@
+{
+  "name": "alex",
+  "version": "0.1.0",
+  "description": "Alex — an autonomous coding agent you @-mention on GitHub. Plans, waits for approval, builds, opens PRs, and reviews changes, driven by a remote OpenCode server.",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "check": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.5.0"
+  }
+}
