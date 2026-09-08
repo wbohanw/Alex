@@ -35,9 +35,14 @@ export function startApprovalPoller(
             { owner: task.owner, repo: task.repo },
             task.planCommentId!,
           );
-          const approver = reactions.find(
-            (r) => APPROVAL_REACTIONS.has(r.content) && !r.user.login.endsWith("[bot]"),
-          );
+          let approver: (typeof reactions)[number] | undefined;
+          for (const reaction of reactions) {
+            if (!APPROVAL_REACTIONS.has(reaction.content) || reaction.user.login.endsWith("[bot]")) continue;
+            if (await gh.hasWritePermission({ owner: task.owner, repo: task.repo }, reaction.user.login)) {
+              approver = reaction;
+              break;
+            }
+          }
           if (approver) {
             log.info(`Task ${task.id} approved via ${approver.content} by ${approver.user.login}`);
             await runner.approve(task.id, approver.user.login);

@@ -50,6 +50,29 @@ export class WorkspaceManager {
     return { dir, branch, defaultBranch };
   }
 
+  /** Check out GitHub's synthetic PR head ref so review tools see the proposed code. */
+  async createReview(
+    taskId: string,
+    installationId: number,
+    owner: string,
+    repo: string,
+    defaultBranch: string,
+    prNumber: number,
+  ): Promise<Workspace> {
+    const branch = `alex/review-${prNumber}`;
+    const workspace = await this.create(
+      taskId,
+      installationId,
+      owner,
+      repo,
+      defaultBranch,
+      branch,
+    );
+    await git(workspace.dir, ["fetch", "--depth", "50", "origin", `refs/pull/${prNumber}/head`]);
+    await git(workspace.dir, ["checkout", "--detach", "FETCH_HEAD"]);
+    return workspace;
+  }
+
   /** Re-attach to an existing workspace (e.g. build phase after approval). */
   get(taskId: string): string | null {
     const dir = join(this.root, taskId);

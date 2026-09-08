@@ -9,11 +9,12 @@ export type RouteHandler = (req: Request, url: URL) => Response | Promise<Respon
 export interface ServerDeps {
   config: Config;
   onWebhook: WebhookHandler;
+  readiness?: () => Promise<boolean>;
   /** Extra routes (dashboard API etc.), matched as "METHOD /path" or "METHOD /path/*". */
   routes?: Map<string, RouteHandler>;
 }
 
-export function startServer({ config, onWebhook, routes }: ServerDeps) {
+export function startServer({ config, onWebhook, readiness, routes }: ServerDeps) {
   const server = Bun.serve({
     port: config.port,
     idleTimeout: 120,
@@ -22,6 +23,10 @@ export function startServer({ config, onWebhook, routes }: ServerDeps) {
 
       if (url.pathname === "/healthz") {
         return Response.json({ ok: true, name: "alex", version: "0.1.0" });
+      }
+      if (url.pathname === "/readyz") {
+        const ok = (await readiness?.()) ?? true;
+        return Response.json({ ok, opencode: ok }, { status: ok ? 200 : 503 });
       }
       if (req.method === "POST" && url.pathname === "/webhook/github") {
         return handleWebhookRequest(req, config.github.webhookSecret, onWebhook);
