@@ -59,8 +59,8 @@ OPENCODE_URL=https://<opencode-host>:4096
 OPENCODE_PASSWORD=<password>
 
 # Optional: pin Alex to a provider/model configured on the OpenCode server.
-OPENCODE_PROVIDER_ID=groq
-OPENCODE_MODEL_ID=openai/gpt-oss-120b
+OPENCODE_PROVIDER_ID=<provider-id>
+OPENCODE_MODEL_ID=<model-id>
 ```
 
 Set both model variables together. If they are blank, Alex uses the OpenCode server's default model.
