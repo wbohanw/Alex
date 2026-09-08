@@ -22,6 +22,7 @@ export interface Config {
   opencode: {
     url: string;
     password?: string;
+    workspaceRoot?: string;
   };
 }
 
@@ -72,6 +73,7 @@ export async function loadConfig(): Promise<Config> {
     opencode: {
       url: required("OPENCODE_URL").replace(/\/$/, ""),
       password: optional("OPENCODE_PASSWORD") || undefined,
+      workspaceRoot: optional("OPENCODE_WORKSPACE_ROOT") || undefined,
     },
   };
 }

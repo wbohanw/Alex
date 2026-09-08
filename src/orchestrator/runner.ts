@@ -5,6 +5,7 @@ import { GitHubClient, type RepoRef } from "../github/api";
 import type { Memory, TaskRecord } from "../memory/db";
 import type { OpenCodeClient, SessionEvent } from "../opencode/client";
 import type { WorkspaceManager } from "../workspace/manager";
+import { basename, join } from "node:path";
 import { logger } from "../log";
 import { buildPrompt, planCommentBody, planPrompt, reviewPrompt, revisePrompt } from "./prompts";
 
@@ -23,7 +24,7 @@ export interface StartReviewParams extends StartWorkParams {
 }
 
 export class TaskRunner {
-  private stopping = new Set<string>();
+  private controllers = new Map<string, AbortController>();
 
   constructor(
     private readonly config: Config,
@@ -64,8 +65,9 @@ export class TaskRunner {
       return;
     }
 
-    const taskId = `${owner}-${repo}-${issueNumber}-${Date.now().toString(36)}`;
-    const branch = `alex/issue-${issueNumber}`;
+    const nonce = Date.now().toString(36);
+    const taskId = `${owner}-${repo}-${issueNumber}-${nonce}`;
+    const branch = `alex/issue-${issueNumber}-${nonce}`;
     let task = this.memory.createTask({
       id: taskId,
       kind: "work",
@@ -81,17 +83,22 @@ export class TaskRunner {
 
     try {
       await gh.commentOnIssue(ref, issueNumber, "On it 👋 — I'll explore the repo and post an implementation plan here for approval.");
+      this.assertRunning(task.id);
       const issue = await gh.getIssue(ref, issueNumber);
       const repoInfo = await gh.getRepo(ref);
+      this.assertRunning(task.id);
 
       this.note(task, "phase", "Creating workspace");
       const ws = await this.workspaces.create(taskId, installationId, owner, repo, repoInfo.default_branch, branch);
+      this.assertRunning(task.id);
 
       this.note(task, "phase", "Planning");
-      const sessionId = await this.opencode.createSession(`plan ${owner}/${repo}#${issueNumber}`, ws.dir);
+      const opencodeDir = this.opencodeDirectory(ws.dir);
+      const sessionId = await this.opencode.createSession(`plan ${owner}/${repo}#${issueNumber}`, opencodeDir);
+      this.assertRunning(task.id);
       task = this.memory.updateTask(taskId, { sessionId });
 
-      await this.runSession(task, sessionId, ws.dir, planPrompt({
+      await this.runSession(task, sessionId, opencodeDir, planPrompt({
         owner,
         repo,
         issueNumber,
@@ -100,10 +107,13 @@ export class TaskRunner {
         instructions: params.instructions,
       }));
 
-      const plan = await this.opencode.lastAssistantText(sessionId, ws.dir);
+      this.assertRunning(task.id);
+      const plan = await this.opencode.lastAssistantText(sessionId, opencodeDir);
       if (!plan) throw new Error("Plan phase produced no output");
+      this.assertRunning(task.id);
 
       const comment = await gh.commentOnIssue(ref, issueNumber, planCommentBody(plan, this.config.github.appSlug));
+      this.assertRunning(task.id);
       task = this.setStatus(task, "awaiting_approval", { plan, planCommentId: comment.id });
       this.note(task, "phase", "Plan posted — awaiting approval");
     } catch (err) {
@@ -128,15 +138,21 @@ export class TaskRunner {
       task = this.setStatus(task, "building");
       this.note(task, "phase", `Plan approved by ${approvedBy} — building`);
 
-      await this.runSession(task, sessionId, ws, buildPrompt(plan));
-      const summary = await this.opencode.lastAssistantText(sessionId, ws);
+      const opencodeDir = this.opencodeDirectory(ws);
+      await this.runSession(task, sessionId, opencodeDir, buildPrompt(plan));
+      this.assertRunning(task.id);
+      const summary = await this.opencode.lastAssistantText(sessionId, opencodeDir);
+      this.assertRunning(task.id);
 
       this.note(task, "phase", "Committing and pushing");
       const committed = await this.workspaces.commitAll(ws, `${task.instructions.slice(0, 72) || `Work on #${task.issueNumber}`}\n\nCloses #${task.issueNumber}`);
+      this.assertRunning(task.id);
       if (!committed) throw new Error("Build phase made no changes");
       await this.workspaces.push(ws, task.installationId, task.owner, task.repo, branch);
+      this.assertRunning(task.id);
 
       const repoInfo = await gh.getRepo(ref);
+      this.assertRunning(task.id);
       const pr = await gh.createPull(ref, {
         title: `Alex: ${task.instructions.slice(0, 60) || `issue #${task.issueNumber}`}`,
         head: branch,
@@ -144,6 +160,7 @@ export class TaskRunner {
         draft: true,
         body: `${summary}\n\nCloses #${task.issueNumber}\n\n---\n_Planned and built by Alex. Plan approved by @${approvedBy}._`,
       });
+      this.assertRunning(task.id);
       task = this.setStatus(task, "completed", { prNumber: pr.number });
       this.note(task, "phase", `Done — opened PR #${pr.number}`);
       await gh.commentOnIssue(ref, task.issueNumber, `Build complete — opened draft PR ${pr.html_url}. Comment \`@${this.config.github.appSlug} review\` there if you want a self-review pass.`);
@@ -165,15 +182,19 @@ export class TaskRunner {
     try {
       task = this.setStatus(task, "planning");
       this.note(task, "phase", "Revising plan from feedback");
-      await this.runSession(task, sessionId, ws, revisePrompt(feedback));
-      const plan = await this.opencode.lastAssistantText(sessionId, ws);
+      const opencodeDir = this.opencodeDirectory(ws);
+      await this.runSession(task, sessionId, opencodeDir, revisePrompt(feedback));
+      this.assertRunning(task.id);
+      const plan = await this.opencode.lastAssistantText(sessionId, opencodeDir);
       if (!plan) throw new Error("Revision produced no output");
+      this.assertRunning(task.id);
 
       const comment = await this.github(task.installationId).commentOnIssue(
         { owner: task.owner, repo: task.repo },
         task.issueNumber,
         planCommentBody(plan, this.config.github.appSlug),
       );
+      this.assertRunning(task.id);
       task = this.setStatus(task, "awaiting_approval", { plan, planCommentId: comment.id });
       this.note(task, "phase", "Revised plan posted — awaiting approval");
     } catch (err) {
@@ -186,6 +207,15 @@ export class TaskRunner {
     const { installationId, owner, repo, prNumber } = params;
     const gh = this.github(installationId);
     const ref: RepoRef = { owner, repo };
+
+    if (this.memory.findActiveTaskByIssue(owner, repo, prNumber)) {
+      await gh.commentOnIssue(ref, prNumber, "I already have an active task on this pull request.");
+      return;
+    }
+    if (this.memory.countActiveTasks() >= this.config.maxConcurrentTasks) {
+      await gh.commentOnIssue(ref, prNumber, "I'm at my concurrency limit right now — please try again shortly.");
+      return;
+    }
 
     const taskId = `${owner}-${repo}-pr${prNumber}-${Date.now().toString(36)}`;
     let task = this.memory.createTask({
@@ -205,19 +235,33 @@ export class TaskRunner {
       const pr = await gh.getPull(ref, prNumber);
       const diff = await gh.getPullDiff(ref, prNumber);
       const repoInfo = await gh.getRepo(ref);
+      this.assertRunning(task.id);
 
       this.note(task, "phase", "Creating review workspace");
-      const ws = await this.workspaces.create(taskId, installationId, owner, repo, repoInfo.default_branch, `alex/review-${prNumber}`);
+      const ws = await this.workspaces.createReview(
+        taskId,
+        installationId,
+        owner,
+        repo,
+        repoInfo.default_branch,
+        prNumber,
+      );
+      this.assertRunning(task.id);
 
       this.note(task, "phase", "Reviewing");
-      const sessionId = await this.opencode.createSession(`review ${owner}/${repo}#${prNumber}`, ws.dir);
+      const opencodeDir = this.opencodeDirectory(ws.dir);
+      const sessionId = await this.opencode.createSession(`review ${owner}/${repo}#${prNumber}`, opencodeDir);
+      this.assertRunning(task.id);
       task = this.memory.updateTask(taskId, { sessionId });
 
-      await this.runSession(task, sessionId, ws.dir, reviewPrompt(pr.title, pr.body ?? "", truncateDiff(diff), params.instructions));
-      const review = await this.opencode.lastAssistantText(sessionId, ws.dir);
+      await this.runSession(task, sessionId, opencodeDir, reviewPrompt(pr.title, pr.body ?? "", truncateDiff(diff), params.instructions));
+      this.assertRunning(task.id);
+      const review = await this.opencode.lastAssistantText(sessionId, opencodeDir);
       if (!review) throw new Error("Review produced no output");
+      this.assertRunning(task.id);
 
       await gh.createReview(ref, prNumber, { body: review, event: "COMMENT" });
+      this.assertRunning(task.id);
       task = this.setStatus(task, "completed");
       this.note(task, "phase", "Review posted");
       this.workspaces.remove(taskId);
@@ -229,24 +273,49 @@ export class TaskRunner {
   async stop(taskId: string): Promise<void> {
     const task = this.memory.getTask(taskId);
     if (!task || this.memory.isTerminal(task.status)) return;
-    this.stopping.add(taskId);
-    const ws = this.workspaces.get(taskId);
-    if (task.sessionId && ws) await this.opencode.abort(task.sessionId, ws);
+    this.controllers.get(taskId)?.abort(new Error("Task stopped by maintainer"));
     this.setStatus(task, "stopped");
     this.note(task, "phase", "Stopped by maintainer");
+    const ws = this.workspaces.get(taskId);
+    if (task.sessionId && ws) await this.opencode.abort(task.sessionId, this.opencodeDirectory(ws));
     this.workspaces.remove(taskId);
   }
 
   private async runSession(task: TaskRecord, sessionId: string, dir: string, prompt: string): Promise<void> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.taskTimeoutMs);
+    this.controllers.set(task.id, controller);
+    const timeout = setTimeout(() => {
+      controller.abort(new Error(`Session timed out after ${this.config.taskTimeoutMs}ms`));
+      void this.opencode.abort(sessionId, dir);
+    }, this.config.taskTimeoutMs);
+    const streamController = new AbortController();
+    const streamSignal = AbortSignal.any([controller.signal, streamController.signal]);
+    const events = this.opencode
+      .waitForIdle(sessionId, dir, (evt) => this.onSessionEvent(task, evt), streamSignal)
+      .catch((err) => {
+        if (!streamSignal.aborted) log.warn(`Event stream failed for task ${task.id}`, err);
+      });
     try {
-      const wait = this.opencode.waitForIdle(sessionId, (evt) => this.onSessionEvent(task, evt), controller.signal);
-      await this.opencode.sendPrompt(sessionId, dir, prompt);
-      await wait;
-      if (controller.signal.aborted) throw new Error(`Session timed out after ${this.config.taskTimeoutMs}ms`);
+      await this.opencode.sendPrompt(sessionId, dir, prompt, undefined, controller.signal);
+      controller.signal.throwIfAborted();
+      this.assertRunning(task.id);
     } finally {
+      streamController.abort();
+      await events;
       clearTimeout(timeout);
+      if (this.controllers.get(task.id) === controller) this.controllers.delete(task.id);
+    }
+  }
+
+  private opencodeDirectory(localDir: string): string {
+    const remoteRoot = this.config.opencode.workspaceRoot;
+    return remoteRoot ? join(remoteRoot, basename(localDir)) : localDir;
+  }
+
+  private assertRunning(taskId: string): void {
+    const current = this.memory.getTask(taskId);
+    if (!current || this.memory.isTerminal(current.status)) {
+      throw new Error("Task is no longer running");
     }
   }
 
@@ -269,7 +338,12 @@ export class TaskRunner {
   }
 
   private async fail(task: TaskRecord, gh: GitHubClient, err: unknown): Promise<void> {
-    if (this.stopping.has(task.id)) return;
+    const current = this.memory.getTask(task.id);
+    if (!current) return;
+    if (this.memory.isTerminal(current.status)) {
+      if (current.status === "stopped") this.workspaces.remove(task.id);
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     log.error(`Task ${task.id} failed: ${message}`);
     this.setStatus(task, "failed", { error: message });

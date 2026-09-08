@@ -19,6 +19,12 @@ export function createWebhookDispatcher(
   memory: Memory,
   runner: TaskRunner,
   appSlug: string,
+  canControl: (
+    installationId: number,
+    owner: string,
+    repo: string,
+    login: string,
+  ) => Promise<boolean>,
 ) {
   return async function dispatch({ event, payload }: WebhookEvent): Promise<void> {
     if (event !== "issue_comment" || payload.action !== "created") return;
@@ -37,6 +43,15 @@ export function createWebhookDispatcher(
     const isPullRequest = Boolean(payload.issue?.pull_request);
     const activeTask = memory.findActiveTaskByIssue(owner, repo, issueNumber);
     const mention = parseMention(body, appSlug);
+
+    // Every supported command can spend compute or mutate repository state.
+    // Check current repository permission instead of trusting issue visibility
+    // or GitHub's coarse author_association field.
+    if ((mention || activeTask?.status === "awaiting_approval") &&
+        !(await canControl(installationId, owner, repo, senderLogin))) {
+      log.warn(`Ignored command from unauthorized user ${senderLogin} on ${owner}/${repo}#${issueNumber}`);
+      return;
+    }
 
     if (mention) {
       log.info(`Mention from ${senderLogin} on ${owner}/${repo}#${issueNumber}: ${mention.kind}`);

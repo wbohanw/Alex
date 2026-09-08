@@ -1,6 +1,6 @@
 # Setting up Alex
 
-Alex needs three things you must create yourself: a **GitHub App** (its identity), a **remote OpenCode server** (its brain), and a **public URL** for webhook delivery. This guide walks through all of it.
+Alex needs three things you must create yourself: a **GitHub App** (its identity), an **OpenCode server** (its brain), and a **public URL** for webhook delivery. This guide walks through all of it.
 
 ## 1. Register the GitHub App
 
@@ -41,7 +41,7 @@ After creating:
 
 From the app page, **Install App** → choose your account → select the repositories Alex is allowed to work on. This is the authorization boundary: Alex can only ever see and push to repos you select here.
 
-## 3. Run a remote OpenCode server
+## 3. Run an OpenCode server
 
 On the machine that should do the LLM work:
 
@@ -52,11 +52,16 @@ opencode serve --port 4096 --hostname 0.0.0.0
 Put a password on it if it's reachable from the internet, and set:
 
 ```
+OPENCODE_SERVER_PASSWORD=<password> opencode serve --port 4096 --hostname 0.0.0.0
+
+# In Alex's environment:
 OPENCODE_URL=https://<opencode-host>:4096
 OPENCODE_PASSWORD=<password>
 ```
 
-The OpenCode server needs provider credentials (e.g. `ANTHROPIC_API_KEY`) configured on *its* machine — Alex never talks to an LLM directly.
+The OpenCode server needs provider credentials (e.g. `ANTHROPIC_API_KEY`) configured in *its* process — Alex never talks to an LLM directly.
+
+OpenCode must also see the repository workspaces Alex creates under `DATA_DIR/workspaces`. The simplest and recommended deployment runs both processes on the same host. If OpenCode runs in another container or on another host, mount that directory into the OpenCode environment and set `OPENCODE_WORKSPACE_ROOT` to its server-side path. A remote server without this shared storage cannot inspect or edit Alex's checkouts.
 
 ## 4. Configure and start Alex
 
@@ -79,9 +84,12 @@ Expose the server publicly (reverse proxy, Cloudflare Tunnel, or ngrok) so GitHu
 4. Watch the build phase stream into the dashboard; a draft PR appears when it's done.
 5. On any PR: `@<slug> review` for a review pass.
 
+Only repository users with write, maintain, or admin permission can start or control tasks from GitHub. Dashboard controls are separately limited to `DASHBOARD_ALLOWED_LOGINS`.
+
 ## Troubleshooting
 
 - **No reaction to mentions**: check the app's webhook deliveries page (app settings → Advanced) for delivery errors; verify `GITHUB_WEBHOOK_SECRET` matches.
 - **403 on dashboard login**: your login isn't in `DASHBOARD_ALLOWED_LOGINS` (case-insensitive).
 - **Plan phase hangs**: confirm `OPENCODE_URL` is reachable from Alex's machine and the OpenCode server has valid provider credentials.
+- **Readiness check fails**: request `/readyz`; it returns 503 when Alex cannot authenticate to or reach OpenCode. `/healthz` only checks the Alex process.
 - **👍 approval slow**: reactions are polled every 30s (GitHub sends no webhook for them). Reply `approved` or use the dashboard for instant approval.

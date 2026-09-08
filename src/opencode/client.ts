@@ -15,24 +15,27 @@ export interface SessionEvent {
 }
 
 /**
- * Thin wrapper over the OpenCode SDK pointed at a remote server.
+ * Thin wrapper over the OpenCode SDK pointed at an OpenCode server.
  * The server does the LLM work; Alex only creates sessions, sends prompts,
  * and consumes the event stream.
  */
 export class OpenCodeClient {
   private client: ReturnType<typeof createOpencodeClient>;
+  private readonly baseUrl: string;
+  private readonly authorization?: string;
 
   constructor(url: string, password?: string) {
+    this.baseUrl = url.replace(/\/$/, "");
+    this.authorization = password
+      ? `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
+      : undefined;
     this.client = createOpencodeClient({
-      baseUrl: url,
-      ...(password
+      baseUrl: this.baseUrl,
+      ...(this.authorization
         ? {
             fetch: (req: Request) => {
               const headers = new Headers(req.headers);
-              headers.set(
-                "authorization",
-                `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`,
-              );
+              headers.set("authorization", this.authorization!);
               return fetch(new Request(req, { headers }));
             },
           }
@@ -56,6 +59,7 @@ export class OpenCodeClient {
     directory: string,
     text: string,
     options?: PromptOptions,
+    signal?: AbortSignal,
   ): Promise<void> {
     await this.client.session.prompt({
       path: { id: sessionId },
@@ -66,6 +70,7 @@ export class OpenCodeClient {
         ...(options?.system ? { system: options.system } : {}),
         ...(options?.model ? { model: options.model } : {}),
       },
+      signal,
     });
   }
 
@@ -76,10 +81,11 @@ export class OpenCodeClient {
    */
   async waitForIdle(
     sessionId: string,
+    directory: string,
     onEvent: (evt: SessionEvent) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    const events = await this.client.event.subscribe();
+    const events = await this.client.event.subscribe({ query: { directory }, signal });
     for await (const event of (events as any).stream as AsyncIterable<SessionEvent>) {
       if (signal?.aborted) return;
       const sid =
@@ -128,8 +134,12 @@ export class OpenCodeClient {
 
   async health(): Promise<boolean> {
     try {
-      await (this.client as any).app.get?.();
-      return true;
+      const res = await fetch(`${this.baseUrl}/global/health`, {
+        headers: this.authorization ? { authorization: this.authorization } : undefined,
+      });
+      if (!res.ok) return false;
+      const body = (await res.json()) as { healthy?: boolean };
+      return body.healthy === true;
     } catch {
       return false;
     }

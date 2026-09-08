@@ -70,6 +70,14 @@ export class GitHubClient {
     );
   }
 
+  async hasWritePermission(ref: RepoRef, username: string): Promise<boolean> {
+    const result = await this.request<{ permission: string }>(
+      "GET",
+      `/repos/${ref.owner}/${ref.repo}/collaborators/${encodeURIComponent(username)}/permission`,
+    );
+    return new Set(["admin", "maintain", "write"]).has(result.permission);
+  }
+
   // --- Pull requests ---
 
   createPull(
