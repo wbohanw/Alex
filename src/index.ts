@@ -1,5 +1,7 @@
 import { EventBus } from "./bus";
 import { loadConfig } from "./config";
+import { dashboardRoutes } from "./dashboard/api";
+import { DashboardAuth } from "./dashboard/auth";
 import { GitHubAppAuth } from "./github/app-auth";
 import { createWebhookDispatcher } from "./github/events";
 import { logger, setLogLevel } from "./log";
@@ -25,8 +27,10 @@ async function main(): Promise<void> {
 
   const dispatch = createWebhookDispatcher(memory, runner, config.github.appSlug);
   const stopPoller = startApprovalPoller(memory, runner, auth);
+  const dashAuth = new DashboardAuth(config);
+  const routes = dashboardRoutes(memory, runner, bus, dashAuth, process.env.DASHBOARD_STATIC_DIR);
 
-  const server = startServer({ config, onWebhook: dispatch });
+  const server = startServer({ config, onWebhook: dispatch, routes });
 
   const shutdown = () => {
     log.info("Shutting down");
