@@ -97,5 +97,13 @@ Only repository users with write, maintain, or admin permission can start or con
 - **No reaction to mentions**: check the app's webhook deliveries page (app settings → Advanced) for delivery errors; verify `GITHUB_WEBHOOK_SECRET` matches.
 - **403 on dashboard login**: your login isn't in `DASHBOARD_ALLOWED_LOGINS` (case-insensitive).
 - **Plan phase hangs**: confirm `OPENCODE_URL` is reachable from Alex's machine and the OpenCode server has valid provider credentials.
-- **Readiness check fails**: request `/readyz`; it returns 503 when Alex cannot authenticate to or reach OpenCode. `/healthz` only checks the Alex process.
+- **Health and readiness checks**:
+  ```bash
+  # Check if Alex is running
+  curl http://localhost:3900/healthz
+
+  # Check if Alex can reach OpenCode (also verifies readiness)
+  curl http://localhost:3900/readyz
+  ```
+  `/healthz` checks that the Alex process is alive; `/readyz` also verifies OpenCode connectivity.
 - **👍 approval slow**: reactions are polled every 30s (GitHub sends no webhook for them). Reply `approved` or use the dashboard for instant approval.
