@@ -23,6 +23,10 @@ export interface Config {
     url: string;
     password?: string;
     workspaceRoot?: string;
+    model?: {
+      providerID: string;
+      modelID: string;
+    };
   };
 }
 
@@ -49,6 +53,12 @@ async function loadPrivateKey(): Promise<string> {
 }
 
 export async function loadConfig(): Promise<Config> {
+  const opencodeProviderId = optional("OPENCODE_PROVIDER_ID");
+  const opencodeModelId = optional("OPENCODE_MODEL_ID");
+  if (Boolean(opencodeProviderId) !== Boolean(opencodeModelId)) {
+    throw new Error("Set both OPENCODE_PROVIDER_ID and OPENCODE_MODEL_ID, or leave both blank");
+  }
+
   return {
     port: Number(optional("PORT", "3900")),
     dataDir: expandHome(optional("DATA_DIR", "~/.alex")),
@@ -74,6 +84,9 @@ export async function loadConfig(): Promise<Config> {
       url: required("OPENCODE_URL").replace(/\/$/, ""),
       password: optional("OPENCODE_PASSWORD") || undefined,
       workspaceRoot: optional("OPENCODE_WORKSPACE_ROOT") || undefined,
+      model: opencodeProviderId && opencodeModelId
+        ? { providerID: opencodeProviderId, modelID: opencodeModelId }
+        : undefined,
     },
   };
 }

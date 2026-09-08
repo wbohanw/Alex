@@ -174,4 +174,46 @@ describe("TaskRunner lifecycle", () => {
     expect(new Set(directories)).toEqual(new Set(["/mnt/alex-workspaces/task-1"]));
     expect(memory.listTasks()[0]?.status).toBe("awaiting_approval");
   });
+
+  test("passes the configured OpenCode model to every prompt", async () => {
+    let promptOptions: unknown;
+    const comments: string[] = [];
+    const opencode: any = {
+      createSession: async () => "session-1",
+      waitForIdle: async (_id: string, _dir: string, _onEvent: unknown, signal: AbortSignal) =>
+        await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true })),
+      sendPrompt: async (_id: string, _dir: string, _prompt: string, options: unknown) => {
+        promptOptions = options;
+      },
+      lastAssistantText: async () => "## Plan\n\n1. Change code",
+    };
+    const localDir = join(dir, "workspaces", "task-1");
+    const workspaces: any = {
+      create: async () => ({ dir: localDir }),
+      createReview: async () => ({ dir: localDir }),
+      get: () => localDir,
+      remove: () => {},
+    };
+    const model = { providerID: "groq", modelID: "openai/gpt-oss-120b" };
+    const runner = new TaskRunner(
+      { ...config(), opencode: { model } },
+      memory,
+      new EventBus(),
+      {} as any,
+      opencode,
+      workspaces,
+    );
+    (runner as any).github = () => github(comments);
+
+    await runner.startWork({
+      installationId: 1,
+      owner: "owner",
+      repo: "repo",
+      issueNumber: 1,
+      instructions: "fix it",
+    });
+
+    expect(promptOptions).toEqual({ model });
+    expect(memory.listTasks()[0]?.status).toBe("awaiting_approval");
+  });
 });

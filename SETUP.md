@@ -57,7 +57,13 @@ OPENCODE_SERVER_PASSWORD=<password> opencode serve --port 4096 --hostname 0.0.0.
 # In Alex's environment:
 OPENCODE_URL=https://<opencode-host>:4096
 OPENCODE_PASSWORD=<password>
+
+# Optional: pin Alex to a provider/model configured on the OpenCode server.
+OPENCODE_PROVIDER_ID=groq
+OPENCODE_MODEL_ID=openai/gpt-oss-120b
 ```
+
+Set both model variables together. If they are blank, Alex uses the OpenCode server's default model.
 
 The OpenCode server needs provider credentials (e.g. `ANTHROPIC_API_KEY`) configured in *its* process — Alex never talks to an LLM directly.
 

@@ -296,7 +296,10 @@ export class TaskRunner {
         if (!streamSignal.aborted) log.warn(`Event stream failed for task ${task.id}`, err);
       });
     try {
-      await this.opencode.sendPrompt(sessionId, dir, prompt, undefined, controller.signal);
+      const options = this.config.opencode.model
+        ? { model: this.config.opencode.model }
+        : undefined;
+      await this.opencode.sendPrompt(sessionId, dir, prompt, options, controller.signal);
       controller.signal.throwIfAborted();
       this.assertRunning(task.id);
     } finally {
