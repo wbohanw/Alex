@@ -20,14 +20,61 @@ a:hover { text-decoration: underline; }
 button { font: inherit; cursor: pointer; }
 
 .login {
-  min-height: 100vh; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 16px;
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(47, 129, 247, 0.12), transparent 36%),
+    var(--bg);
 }
-.login h1 { font-size: 40px; margin: 0; }
-.login p { color: var(--muted); margin: 0; }
-.login .gh-button {
-  margin-top: 12px; padding: 10px 20px; border-radius: 8px;
-  background: var(--accent); color: #fff; border: none; font-weight: 600;
+
+.login-particle {
+  width: min(1180px, 96vw);
+  height: clamp(260px, 44vw, 480px);
+}
+
+.login-signin {
+  position: relative;
+  z-index: 1;
+  min-width: 104px;
+  padding: 11px 22px;
+  border: 1px solid rgba(230, 237, 243, 0.48);
+  border-radius: 999px;
+  color: var(--text);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  background: rgba(13, 17, 23, 0.58);
+  backdrop-filter: blur(10px);
+  animation: signin-fade 3.8s ease-in-out infinite alternate;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.login-signin:hover,
+.login-signin:focus-visible {
+  color: #fff;
+  text-decoration: none;
+  border-color: var(--accent);
+  background: rgba(47, 129, 247, 0.18);
+  transform: translateY(-2px);
+  animation-play-state: paused;
+  opacity: 1;
+}
+
+@keyframes signin-fade {
+  from { opacity: 0.32; }
+  to { opacity: 0.94; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-signin { animation: none; opacity: 1; }
 }
 
 .layout { display: grid; grid-template-columns: 380px 1fr; min-height: 100vh; }
