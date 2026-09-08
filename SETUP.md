@@ -105,5 +105,5 @@ Only repository users with write, maintain, or admin permission can start or con
   # Check if Alex can reach OpenCode (also verifies readiness)
   curl http://localhost:3900/readyz
   ```
-  `/healthz` checks that the Alex process is alive; `/readyz` also verifies OpenCode connectivity.
+  `/healthz` checks that the Alex process is alive; `/readyz` also checks that Alex can authenticate to and reach OpenCode.
 - **👍 approval slow**: reactions are polled every 30s (GitHub sends no webhook for them). Reply `approved` or use the dashboard for instant approval.
