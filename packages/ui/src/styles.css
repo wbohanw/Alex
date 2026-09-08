@@ -50,7 +50,6 @@ button { font: inherit; cursor: pointer; }
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.16em;
-  text-transform: lowercase;
   background: rgba(13, 17, 23, 0.58);
   backdrop-filter: blur(10px);
   animation: signin-fade 3.8s ease-in-out infinite alternate;
