@@ -15,5 +15,8 @@
   "devDependencies": {
     "@types/bun": "^1.1.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.18.29"
   }
 }
