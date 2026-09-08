@@ -84,7 +84,7 @@ Expose the server publicly (reverse proxy, Cloudflare Tunnel, or ngrok) so GitHu
 
 ### Optional: Vercel frontend with a tunneled backend
 
-The Vite dashboard can run on Vercel while Alex continues running behind ngrok. Configure external rewrites for `/api/*`, `/auth/*`, and `/webhook/*` to the ngrok origin, then set `PUBLIC_BASE_URL` and the GitHub App callback and webhook URLs to the Vercel custom domain. The browser keeps a single origin for OAuth cookies and API calls.
+The Vite dashboard can run on Vercel while Alex continues running behind ngrok. Configure external rewrites for `/api/*`, `/auth/*`, and `/webhook/*` to the ngrok origin, then set `PUBLIC_BASE_URL` and the GitHub App callback and webhook URLs to the Vercel custom domain. The included Vercel middleware adds ngrok's browser-warning bypass header to proxied requests. The browser keeps a single origin for OAuth cookies and API calls.
 
 Vercel external rewrites can close long-lived upstream requests after two minutes. The dashboard's `EventSource` reconnects automatically, and every new connection refreshes the task list and selected task so an event during the reconnect window is not lost from the UI.
 
