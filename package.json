@@ -7,7 +7,10 @@
     "start": "bun run src/index.ts",
     "dev": "bun --watch run src/index.ts",
     "check": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "dev:ui": "cd packages/ui && bun run dev",
+    "build:ui": "cd packages/ui && bun run build",
+    "check:ui": "cd packages/ui && bun run check"
   },
   "engines": {
     "bun": ">=1.1.0"
