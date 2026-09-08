@@ -23,7 +23,7 @@ export function LoginScreen() {
         />
       </div>
       <a className="login-signin" href="/auth/login">
-        signin
+        Sign In
       </a>
     </main>
   );
