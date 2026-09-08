@@ -60,7 +60,7 @@ export function App() {
     <div className="layout">
       <aside className="sidebar">
         <div className="brand">
-          <h1>🤖 Alex</h1>
+          <h1>Alex-bot</h1>
           <div className="user">
             <img src={me.avatarUrl} alt="" />
             {me.login}
