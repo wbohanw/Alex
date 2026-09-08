@@ -1,0 +1,41 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "bun run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://jolynn-pseudodemocratic-keren.ngrok-free.dev/api/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://jolynn-pseudodemocratic-keren.ngrok-free.dev/auth/:path*"
+    },
+    {
+      "source": "/webhook/:path*",
+      "destination": "https://jolynn-pseudodemocratic-keren.ngrok-free.dev/webhook/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "x-vercel-enable-rewrite-caching", "value": "0" }
+      ]
+    },
+    {
+      "source": "/auth/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/webhook/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
+  ]
+}

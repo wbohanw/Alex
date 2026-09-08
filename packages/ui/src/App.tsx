@@ -42,6 +42,11 @@ export function App() {
     if (!me) return;
     void refreshTasks();
     const unsubscribe = subscribeStream((evt) => {
+      if (evt.type === "hello") {
+        void refreshTasks();
+        if (selectedRef.current) void refreshDetail(selectedRef.current);
+        return;
+      }
       if (evt.type === "task.created" || evt.type === "task.status") void refreshTasks();
       if (evt.taskId && evt.taskId === selectedRef.current) void refreshDetail(evt.taskId);
     });
