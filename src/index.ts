@@ -1,5 +1,7 @@
 import { loadConfig } from "./config";
+import { GitHubAppAuth } from "./github/app-auth";
 import { logger, setLogLevel } from "./log";
+import { startServer } from "./server";
 
 const log = logger("main");
 
@@ -7,18 +9,15 @@ async function main(): Promise<void> {
   const config = await loadConfig();
   setLogLevel(config.logLevel);
 
-  const server = Bun.serve({
-    port: config.port,
-    fetch(req: Request): Response | Promise<Response> {
-      const url = new URL(req.url);
-      if (url.pathname === "/healthz") {
-        return Response.json({ ok: true, name: "alex", version: "0.1.0" });
-      }
-      return new Response("Not found", { status: 404 });
+  const auth = new GitHubAppAuth(config.github.appId, config.github.privateKey);
+  void auth; // consumed by the task pipeline (wired in a later change)
+
+  const server = startServer({
+    config,
+    onWebhook: async ({ event, deliveryId }) => {
+      log.info(`Webhook received: ${event} (${deliveryId})`);
     },
   });
-
-  log.info(`Alex listening on :${server.port}`);
 
   const shutdown = () => {
     log.info("Shutting down");
