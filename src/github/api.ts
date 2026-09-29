@@ -1,4 +1,4 @@
-import type { GitHubAppAuth } from "./app-auth";
+import type { GitHubAppAuth, TokenScope } from "./app-auth";
 
 const API = "https://api.github.com";
 
@@ -12,6 +12,7 @@ export class GitHubClient {
   constructor(
     private readonly auth: GitHubAppAuth,
     readonly installationId: number,
+    private readonly tokenScope: TokenScope = "default",
   ) {}
 
   async request<T = unknown>(
@@ -19,7 +20,7 @@ export class GitHubClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const token = await this.auth.installationToken(this.installationId);
+    const token = await this.auth.installationToken(this.installationId, this.tokenScope);
     const res = await fetch(`${API}${path}`, {
       method,
       headers: {
@@ -120,6 +121,7 @@ export class GitHubClient {
     params: {
       body: string;
       event: "COMMENT" | "REQUEST_CHANGES" | "APPROVE";
+      commit_id?: string;
       comments?: Array<{ path: string; line: number; body: string }>;
     },
   ) {
@@ -136,7 +138,7 @@ export class GitHubClient {
   }
 
   private async requestRaw(method: string, path: string, accept: string): Promise<string> {
-    const token = await this.auth.installationToken(this.installationId);
+    const token = await this.auth.installationToken(this.installationId, this.tokenScope);
     const res = await fetch(`${API}${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, accept, "user-agent": "alex-agent" },

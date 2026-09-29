@@ -25,6 +25,7 @@ export function createWebhookDispatcher(
     repo: string,
     login: string,
   ) => Promise<boolean>,
+  reviewOnlyRepositories: readonly string[] = [],
 ) {
   return async function dispatch({ event, payload }: WebhookEvent): Promise<void> {
     if (event !== "issue_comment" || payload.action !== "created") return;
@@ -43,6 +44,12 @@ export function createWebhookDispatcher(
     const isPullRequest = Boolean(payload.issue?.pull_request);
     const activeTask = memory.findActiveTaskByIssue(owner, repo, issueNumber);
     const mention = parseMention(body, appSlug);
+    const reviewOnly = reviewOnlyRepositories.includes(`${owner}/${repo}`.toLowerCase());
+
+    // These installations are for PR feedback only. Never start code-writing
+    // tasks from an issue or an incidental comment on a protected repository.
+    if (reviewOnly && !(isPullRequest && (mention?.kind === "review" ||
+        (mention?.kind === "stop" && activeTask?.kind === "review")))) return;
 
     // Every supported command can spend compute or mutate repository state.
     // Check current repository permission instead of trusting issue visibility

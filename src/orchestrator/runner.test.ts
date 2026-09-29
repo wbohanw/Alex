@@ -216,4 +216,51 @@ describe("TaskRunner lifecycle", () => {
     expect(promptOptions).toEqual({ model });
     expect(memory.listTasks()[0]?.status).toBe("awaiting_approval");
   });
+
+  test("pins a review to the PR commit and refuses to post if the head moves", async () => {
+    const comments: string[] = [];
+    const posted: any[] = [];
+    const checkoutArgs: any[] = [];
+    let head = "a".repeat(40);
+    const gh: any = {
+      ...github(comments),
+      getPull: async () => ({ title: "Change", body: "", head: { sha: head } }),
+      getPullDiff: async () => "diff --git a/x b/x",
+      createReview: async (...args: any[]) => posted.push(args),
+    };
+    const opencode: any = {
+      createSession: async () => "review-session",
+      waitForIdle: async (_id: string, _dir: string, _onEvent: unknown, signal: AbortSignal) =>
+        await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true })),
+      sendPrompt: async () => {},
+      lastAssistantText: async () => "No findings.",
+    };
+    const workspaces: any = {
+      createReview: async (...args: any[]) => {
+        checkoutArgs.push(args);
+        return { dir: join(dir, "review") };
+      },
+      get: () => join(dir, "review"),
+      remove: () => {},
+    };
+    const runner = new TaskRunner(config(), memory, new EventBus(), {} as any, opencode, workspaces);
+    (runner as any).github = () => gh;
+
+    await runner.startReview({ installationId: 1, owner: "owner", repo: "repo", issueNumber: 2, prNumber: 2, instructions: "" });
+    expect(checkoutArgs[0]?.at(-1)).toBe("a".repeat(40));
+    expect(posted[0]?.[2]).toEqual({ body: "No findings.", event: "COMMENT", commit_id: "a".repeat(40) });
+
+    head = "b".repeat(40);
+    gh.getPull = async () => ({ title: "Change", body: "", head: { sha: head } });
+    gh.createReview = async (...args: any[]) => posted.push(args);
+    const originalLastAssistantText = opencode.lastAssistantText;
+    opencode.lastAssistantText = async () => {
+      head = "c".repeat(40);
+      return originalLastAssistantText();
+    };
+    await runner.startReview({ installationId: 1, owner: "owner", repo: "repo", issueNumber: 3, prNumber: 3, instructions: "" });
+    expect(posted).toHaveLength(1);
+    expect(memory.listTasks().find((task) => task.issueNumber === 3)?.status).toBe("failed");
+    expect(comments.some((body) => body.includes("PR head changed"))).toBe(true);
+  });
 });
