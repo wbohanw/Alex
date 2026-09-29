@@ -19,7 +19,7 @@ function makeFakes(activeTask: any = null, authorized = true) {
   return { memory, runner, calls, canControl };
 }
 
-function delivery(body: string, opts: { isPr?: boolean; senderType?: string } = {}) {
+function delivery(body: string, opts: { isPr?: boolean; senderType?: string; owner?: string; repo?: string } = {}) {
   return {
     event: "issue_comment",
     deliveryId: "d1",
@@ -27,7 +27,7 @@ function delivery(body: string, opts: { isPr?: boolean; senderType?: string } = 
       action: "created",
       sender: { login: "wbohanw", type: opts.senderType ?? "User" },
       installation: { id: 1 },
-      repository: { name: "demo", owner: { login: "wbohanw" } },
+      repository: { name: opts.repo ?? "demo", owner: { login: opts.owner ?? "wbohanw" } },
       issue: { number: 5, ...(opts.isPr ? { pull_request: {} } : {}) },
       comment: { body },
     },
@@ -86,5 +86,18 @@ describe("webhook dispatcher", () => {
     await dispatch(delivery("approved"));
     await dispatch(delivery("@alex stop"));
     expect(calls).toEqual([]);
+  });
+
+  test("review-only repositories accept PR review but never start work", async () => {
+    const { memory, runner, calls, canControl } = makeFakes();
+    const dispatch = createWebhookDispatcher(memory, runner, "alex", canControl, [
+      "litigious-lsat/litigious-frontend",
+      "litigious-lsat/litigious-backend",
+    ]);
+    const target = { owner: "Litigious-LSAT", repo: "Litigious-Frontend" };
+    await dispatch(delivery("@alex fix this", target));
+    await dispatch(delivery("@alex fix this", { ...target, isPr: true }));
+    await dispatch(delivery("@alex review", { ...target, isPr: true }));
+    expect(calls.map((call) => call.method)).toEqual(["startReview"]);
   });
 });

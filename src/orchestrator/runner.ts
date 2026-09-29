@@ -1,6 +1,6 @@
 import type { Config } from "../config";
 import type { EventBus } from "../bus";
-import type { GitHubAppAuth } from "../github/app-auth";
+import type { GitHubAppAuth, TokenScope } from "../github/app-auth";
 import { GitHubClient, type RepoRef } from "../github/api";
 import type { Memory, TaskRecord } from "../memory/db";
 import type { OpenCodeClient, SessionEvent } from "../opencode/client";
@@ -35,8 +35,8 @@ export class TaskRunner {
     private readonly workspaces: WorkspaceManager,
   ) {}
 
-  private github(installationId: number): GitHubClient {
-    return new GitHubClient(this.auth, installationId);
+  private github(installationId: number, scope: TokenScope = "default"): GitHubClient {
+    return new GitHubClient(this.auth, installationId, scope);
   }
 
   private note(task: TaskRecord, type: string, message: string): void {
@@ -205,7 +205,7 @@ export class TaskRunner {
   /** "@alex review" on a pull request. */
   async startReview(params: StartReviewParams): Promise<void> {
     const { installationId, owner, repo, prNumber } = params;
-    const gh = this.github(installationId);
+    const gh = this.github(installationId, "review");
     const ref: RepoRef = { owner, repo };
 
     if (this.memory.findActiveTaskByIssue(owner, repo, prNumber)) {
@@ -245,6 +245,7 @@ export class TaskRunner {
         repo,
         repoInfo.default_branch,
         prNumber,
+        pr.head.sha,
       );
       this.assertRunning(task.id);
 
@@ -260,7 +261,17 @@ export class TaskRunner {
       if (!review) throw new Error("Review produced no output");
       this.assertRunning(task.id);
 
-      await gh.createReview(ref, prNumber, { body: review, event: "COMMENT" });
+      const currentPr = await gh.getPull(ref, prNumber);
+      if (currentPr.head.sha !== pr.head.sha) {
+        throw new Error("PR head changed during the review. Mention me again to review the new commit.");
+      }
+      await gh.createReview(ref, prNumber, {
+        body: diff.length > 60_000
+          ? `${review}\n\n---\nNote: this PR diff exceeded my 60,000-character limit, so this is a partial review.`
+          : review,
+        event: "COMMENT",
+        commit_id: pr.head.sha,
+      });
       this.assertRunning(task.id);
       task = this.setStatus(task, "completed");
       this.note(task, "phase", "Review posted");

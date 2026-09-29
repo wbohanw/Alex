@@ -10,13 +10,15 @@ interface InstallationToken {
   expiresAt: number;
 }
 
+export type TokenScope = "default" | "review";
+
 /**
  * GitHub App authentication without external deps:
  * short-lived RS256 JWTs signed with the app private key, exchanged for
  * per-installation access tokens which are cached until near expiry.
  */
 export class GitHubAppAuth {
-  private tokenCache = new Map<number, InstallationToken>();
+  private tokenCache = new Map<string, InstallationToken>();
 
   constructor(
     private readonly appId: string,
@@ -34,8 +36,9 @@ export class GitHubAppAuth {
     return `${header}.${payload}.${signature}`;
   }
 
-  async installationToken(installationId: number): Promise<string> {
-    const cached = this.tokenCache.get(installationId);
+  async installationToken(installationId: number, scope: TokenScope = "default"): Promise<string> {
+    const cacheKey = `${installationId}:${scope}`;
+    const cached = this.tokenCache.get(cacheKey);
     if (cached && cached.expiresAt - Date.now() > 120_000) return cached.token;
 
     const res = await fetch(`${API}/app/installations/${installationId}/access_tokens`, {
@@ -44,13 +47,17 @@ export class GitHubAppAuth {
         authorization: `Bearer ${this.appJwt()}`,
         accept: "application/vnd.github+json",
         "user-agent": "alex-agent",
+        ...(scope === "review" ? { "content-type": "application/json" } : {}),
       },
+      ...(scope === "review" ? { body: JSON.stringify({
+        permissions: { contents: "read", issues: "read", pull_requests: "write" },
+      }) } : {}),
     });
     if (!res.ok) {
       throw new Error(`Failed to mint installation token (${res.status}): ${await res.text()}`);
     }
     const body = (await res.json()) as { token: string; expires_at: string };
-    this.tokenCache.set(installationId, {
+    this.tokenCache.set(cacheKey, {
       token: body.token,
       expiresAt: new Date(body.expires_at).getTime(),
     });

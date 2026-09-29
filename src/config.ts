@@ -8,6 +8,7 @@ export interface Config {
   publicBaseUrl: string;
   taskTimeoutMs: number;
   maxConcurrentTasks: number;
+  reviewOnlyRepositories: string[];
   github: {
     appId: string;
     privateKey: string;
@@ -66,6 +67,10 @@ export async function loadConfig(): Promise<Config> {
     publicBaseUrl: optional("PUBLIC_BASE_URL", "http://localhost:3900").replace(/\/$/, ""),
     taskTimeoutMs: Number(optional("TASK_TIMEOUT_MS", "900000")),
     maxConcurrentTasks: Number(optional("MAX_CONCURRENT_TASKS", "3")),
+    reviewOnlyRepositories: optional("REVIEW_ONLY_REPOSITORIES")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
     github: {
       appId: required("GITHUB_APP_ID"),
       privateKey: await loadPrivateKey(),

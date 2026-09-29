@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { GitHubAppAuth } from "../github/app-auth";
+import type { GitHubAppAuth, TokenScope } from "../github/app-auth";
 import { logger } from "../log";
 
 const log = logger("workspace");
@@ -34,11 +34,12 @@ export class WorkspaceManager {
     repo: string,
     defaultBranch: string,
     branch: string,
+    tokenScope: TokenScope = "default",
   ): Promise<Workspace> {
     const dir = join(this.root, taskId);
     if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
 
-    const token = await this.auth.installationToken(installationId);
+    const token = await this.auth.installationToken(installationId, tokenScope);
     const url = `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
 
     await git(this.root, ["clone", "--depth", "50", "--branch", defaultBranch, url, taskId]);
@@ -58,6 +59,7 @@ export class WorkspaceManager {
     repo: string,
     defaultBranch: string,
     prNumber: number,
+    expectedHeadSha: string,
   ): Promise<Workspace> {
     const branch = `alex/review-${prNumber}`;
     const workspace = await this.create(
@@ -67,9 +69,15 @@ export class WorkspaceManager {
       repo,
       defaultBranch,
       branch,
+      "review",
     );
     await git(workspace.dir, ["fetch", "--depth", "50", "origin", `refs/pull/${prNumber}/head`]);
-    await git(workspace.dir, ["checkout", "--detach", "FETCH_HEAD"]);
+    const fetchedHeadSha = (await git(workspace.dir, ["rev-parse", "FETCH_HEAD"])).trim();
+    if (fetchedHeadSha !== expectedHeadSha) {
+      this.remove(taskId);
+      throw new Error("PR head changed while preparing the review. Mention me again to retry.");
+    }
+    await git(workspace.dir, ["checkout", "--detach", expectedHeadSha]);
     return workspace;
   }
 

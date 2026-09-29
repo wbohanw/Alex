@@ -28,7 +28,11 @@ Go to **GitHub → Settings → Developer settings → GitHub Apps → New GitHu
 - Pull request
 - Pull request review
 
-**Where can this app be installed?** — "Only on this account" is fine.
+**Where can this app be installed?** — choose "Only on this account" only when
+all target repositories belong to the app owner. To review repositories in an
+organization such as `Litigious-LSAT`, the app must be installable on that
+organization ("Any account"), and an organization owner or eligible repository
+admin must install it. Prefer an organization-owned app for company code.
 
 After creating:
 
@@ -40,6 +44,35 @@ After creating:
 ## 2. Install the app on your repos
 
 From the app page, **Install App** → choose your account → select the repositories Alex is allowed to work on. This is the authorization boundary: Alex can only ever see and push to repos you select here.
+
+### Review only on the Litigious repositories
+
+Install the app with **Only select repositories** and select
+`Litigious-LSAT/Litigious-Frontend` and `Litigious-LSAT/Litigious-Backend`.
+For a dedicated review app, use repository permissions **Contents: read**,
+**Issues: read**, **Pull requests: read and write**, and **Metadata: read**;
+subscribe to **Issue comment**. A review needs Pull requests write access to
+post feedback, but does not need Contents write access. Use a separate Alex
+instance and GitHub App if you also want Alex to build code on other repos.
+
+Set this on the review instance before starting it:
+
+```text
+REVIEW_ONLY_REPOSITORIES=Litigious-LSAT/Litigious-Frontend,Litigious-LSAT/Litigious-Backend
+```
+
+The dispatcher then accepts only `@<app-slug> review` on PRs in those repos,
+plus `@<app-slug> stop` for an active review. It ignores issue work commands,
+plan approvals, and PR work commands there. Review jobs mint a token limited
+to Contents read, Issues read, and Pull requests write, even if the installed
+app has broader permissions. Reviews are posted as **COMMENT** on the PR head
+commit; they never approve or request changes on behalf of a human. Human
+approval gates still apply.
+
+The Alex server and OpenCode process must be trusted to read the selected
+private repositories. Use a sandboxed OpenCode worker without unrelated
+credentials for untrusted contributor PRs; instructions in a PR can attempt
+to direct an agent away from review work.
 
 ## 3. Run an OpenCode server
 

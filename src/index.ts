@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     config.github.appSlug,
     (installationId, owner, repo, login) =>
       new GitHubClient(auth, installationId).hasWritePermission({ owner, repo }, login),
+    config.reviewOnlyRepositories,
   );
   const stopPoller = startApprovalPoller(memory, runner, auth);
   const dashAuth = new DashboardAuth(config);
